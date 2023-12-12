@@ -1,7 +1,9 @@
-import argparse
-import re
+import requests
 import torch
-from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
+from PIL import Image
+from io import BytesIO
+
+from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionPipeline
 
 
 def parse_args():
@@ -9,7 +11,7 @@ def parse_args():
     parser.add_argument(
         "--prompt",
         type=str,
-        default="a scene of sks futuristic cityscape",
+        default="a immersive scene of sks cyberpunk, race cars",
         help="prompt to generate the image",
     )
 
@@ -34,6 +36,13 @@ def parse_args():
         help=("inference steps"),
     )
 
+    parser.add_argument(
+        "--image_prompt",
+        type=str,
+        default="./data/old_game/8090_game.png",
+        help=("the img that goes with prompt"),
+    )
+
     args = parser.parse_args()
     return args
 
@@ -47,20 +56,26 @@ def main():
     if torch.cuda.is_available():
         device = "cuda"
         # if limited by GPU memory, chunking the attention computation in addition to using fp16
-        pipe = StableDiffusionPipeline.from_pretrained(
+        pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
             "runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16
         )
     else:
         device = "cpu"
         # if on CPU or want to have maximum precision on GPU, use default full-precision setting
-        pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
+        pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
+            "runwayml/stable-diffusion-v1-5"
+        )
     print(f"device is {device}")
 
-    pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
     pipe.unet.load_attn_procs(args.model_path)
     pipe.to(device)
 
-    image = pipe(args.prompt, num_inference_steps=args.steps).images[0]
+    init_image = Image.open(args.image_prompt)
+    init_image = init_image.resize((768, 512))
+
+    image = pipe(
+        args.prompt, num_inference_steps=args.steps, strength=0.7, guidance_scale=7.5
+    ).images[0]
     image.save(args.output_folder + "/" + file_name + ".png")
 
 
